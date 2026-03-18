@@ -115,5 +115,6 @@ map_extensions <<'EOF'
     guacamole-display-statistics................DISPLAY_STATISTICS_
     guacamole-history-recording-storage.........RECORDING_
     guacamole-vault/ksm.........................KSM_
+    guacamole-auth-lab-ec2......................LAB_EC2_
 EOF
 
