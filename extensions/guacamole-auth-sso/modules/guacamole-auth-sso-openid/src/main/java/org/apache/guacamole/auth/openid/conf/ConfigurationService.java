@@ -24,6 +24,7 @@ import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import javax.ws.rs.core.UriBuilder;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.environment.Environment;
 import org.apache.guacamole.properties.IntegerGuacamoleProperty;
@@ -221,6 +222,30 @@ public class ConfigurationService {
     };
 
     /**
+     * The URI of the logout endpoint for the OpenID provider. If omitted, this
+     * will be derived from the authorization endpoint where possible.
+     */
+    private static final URIGuacamoleProperty OPENID_LOGOUT_ENDPOINT =
+            new URIGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "openid-logout-endpoint"; }
+
+    };
+
+    /**
+     * The URI that the OpenID provider should redirect to after logout. If
+     * omitted, the standard OpenID redirect URI will be reused.
+     */
+    private static final URIGuacamoleProperty OPENID_POST_LOGOUT_URI =
+            new URIGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "openid-post-logout-uri"; }
+
+    };
+
+    /**
      * The Guacamole server environment.
      */
     @Inject
@@ -276,6 +301,60 @@ public class ConfigurationService {
      */
     public URI getRedirectURI() throws GuacamoleException {
         return environment.getRequiredProperty(OPENID_REDIRECT_URI);
+    }
+
+    /**
+     * Returns the URI of the logout endpoint for the OpenID provider. If not
+     * explicitly configured, this will be derived from the authorization
+     * endpoint by replacing a trailing "/oauth2/authorize" path with
+     * "/logout" or otherwise falling back to "/logout" on the same host.
+     *
+     * @return
+     *     The URI of the logout endpoint for the OpenID provider.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed, or if the authorization
+     *     endpoint property is missing when derivation is required.
+     */
+    public URI getLogoutEndpoint() throws GuacamoleException {
+        URI configured = environment.getProperty(OPENID_LOGOUT_ENDPOINT);
+        if (configured != null) {
+            return configured;
+        }
+
+        URI authorizationEndpoint = getAuthorizationEndpoint();
+        String path = authorizationEndpoint.getPath();
+        if (path != null && path.endsWith("/oauth2/authorize")) {
+            path = path.substring(0, path.length() - "/oauth2/authorize".length()) + "/logout";
+        }
+        else {
+            path = "/logout";
+        }
+
+        return UriBuilder.fromUri(authorizationEndpoint)
+                .replacePath(path)
+                .replaceQuery(null)
+                .fragment(null)
+                .build();
+    }
+
+    /**
+     * Returns the URI that the OpenID provider should redirect to after
+     * logout. If not explicitly configured, the standard OpenID redirect URI
+     * is reused.
+     *
+     * @return
+     *     The URI to redirect to after logout completes.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed.
+     */
+    public URI getPostLogoutURI() throws GuacamoleException {
+        URI configured = environment.getProperty(OPENID_POST_LOGOUT_URI);
+        if (configured != null) {
+            return configured;
+        }
+        return getRedirectURI();
     }
 
     /**

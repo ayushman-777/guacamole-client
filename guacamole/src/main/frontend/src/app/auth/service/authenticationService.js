@@ -70,6 +70,7 @@ angular.module('auth').factory('authenticationService', ['$injector',
     // Required services
     var $q                  = $injector.get('$q');
     var $rootScope          = $injector.get('$rootScope');
+    var $window             = $injector.get('$window');
     var localStorageService = $injector.get('localStorageService');
     var requestService      = $injector.get('requestService');
 
@@ -410,7 +411,10 @@ angular.module('auth').factory('authenticationService', ['$injector',
         $rootScope.$broadcast('guacLogout', token);
 
         // Delete old token
-        return service.revokeToken(token);
+        return service.revokeToken(token)
+        ['finally'](function redirectToOpenIDLogout() {
+            $window.location.href = 'api/ext/openid/logout';
+        });
 
     };
 
