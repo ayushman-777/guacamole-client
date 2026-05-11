@@ -603,6 +603,7 @@ angular.module('clipboard').factory('clipboardService', ['$injector',
             // updated contents
             storedClipboardData(data);
             $rootScope.$broadcast('guacClipboard', data);
+            $rootScope.$broadcast('clipboardSyncInProgress', false);
 
         });
     };
@@ -615,9 +616,14 @@ angular.module('clipboard').factory('clipboardService', ['$injector',
      * components like the "guacClient" directive.
      */
     service.resyncClipboard = function resyncClipboard() {
+        $rootScope.$broadcast('clipboardSyncInProgress', true);
         getLocalClipboard().then(function clipboardRead(data) {
             return service.setClipboard(data);
-        }, angular.noop);
+        }, function clipboardReadFailed() {
+            // Clipboard sync state must be cleared on failure so that
+            // handleMouseEvents(e) won't be blocked.
+            $rootScope.$broadcast('clipboardSyncInProgress', false);
+        });
     };
 
     return service;
