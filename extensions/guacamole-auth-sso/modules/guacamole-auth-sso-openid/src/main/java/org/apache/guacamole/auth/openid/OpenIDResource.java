@@ -52,7 +52,7 @@ public class OpenIDResource extends SSOResource {
     @GET
     @Path("logout")
     public Response redirectToIdentityProviderLogout() throws GuacamoleException {
-        URI logoutURI = UriBuilder.fromUri(confService.getLogoutEndpoint())
+        URI logoutURI = UriBuilder.fromUri(confService.getProviderLogoutEndpoint())
                 .queryParam("client_id", confService.getClientID())
                 .queryParam("logout_uri", confService.getPostLogoutURI())
                 .build();

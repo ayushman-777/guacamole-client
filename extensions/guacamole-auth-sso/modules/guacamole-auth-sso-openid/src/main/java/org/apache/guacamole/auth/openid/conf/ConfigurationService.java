@@ -247,18 +247,6 @@ public class ConfigurationService {
     };
 
     /**
-     * The URI of the logout endpoint for the OpenID provider. If omitted, this
-     * will be derived from the authorization endpoint where possible.
-     */
-    private static final URIGuacamoleProperty OPENID_LOGOUT_ENDPOINT =
-            new URIGuacamoleProperty() {
-
-        @Override
-        public String getName() { return "openid-logout-endpoint"; }
-
-    };
-
-    /**
      * The URI that the OpenID provider should redirect to after logout. If
      * omitted, the standard OpenID redirect URI will be reused.
      */
@@ -341,7 +329,7 @@ public class ConfigurationService {
      *     If guacamole.properties cannot be parsed, or if the authorization
      *     endpoint property is missing when derivation is required.
      */
-    public URI getLogoutEndpoint() throws GuacamoleException {
+    public URI getProviderLogoutEndpoint() throws GuacamoleException {
         URI configured = environment.getProperty(OPENID_LOGOUT_ENDPOINT);
         if (configured != null) {
             return configured;

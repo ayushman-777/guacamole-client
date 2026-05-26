@@ -35,7 +35,7 @@ FROM maven:3-eclipse-temurin-21 AS builder
 # and thus can't be used within Docker)
 RUN    apt-get update                                \
     && apt-get upgrade -y                            \
-    && apt-get install -y software-properties-common \
+    && apt-get install -y gettext-base software-properties-common \
     && add-apt-repository -y ppa:mozillateam/ppa
 
 # Explicitly prefer packages from the Firefox PPA
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y firefox
 # argument will be provided to explicitly unskip any skipped tests. To, for
 # example, allow the building of the RADIUS auth extension, pass a build profile
 # as well: `--build-arg MAVEN_ARGUMENTS="-P lgpl-extensions -DskipTests=false"`.
-ARG MAVEN_ARGUMENTS="-DskipTests=false"
+ARG MAVEN_ARGUMENTS="-DskipTests=false -DdownloadMissingLicenses=true"
 
 # Versions of JDBC drivers to bundle within image
 ARG MSSQL_JDBC_VERSION=9.4.1
@@ -67,6 +67,11 @@ COPY guacamole-docker/environment/ /opt/guacamole/environment/
 
 # Copy source to container for sake of build
 COPY . "$BUILD_DIR"
+
+# Windows checkouts may leave shell scripts with CRLF endings. Normalize them
+# before invoking Guacamole's Linux build scripts.
+RUN find /opt/guacamole "$BUILD_DIR" -type f -name "*.sh" -exec sed -i 's/\r$//' {} + \
+    && find /opt/guacamole "$BUILD_DIR" -type f -name "*.sh" -exec chmod +x {} +
 
 # Run the build itself
 RUN /opt/guacamole/bin/build-guacamole.sh "$BUILD_DIR" /opt/guacamole
