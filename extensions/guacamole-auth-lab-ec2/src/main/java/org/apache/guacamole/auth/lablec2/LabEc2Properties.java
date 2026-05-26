@@ -72,6 +72,17 @@ public final class LabEc2Properties {
             };
 
     /**
+     * Shared secret sent to Illustrator's internal Guacamole endpoint.
+     */
+    public static final GuacamoleProperty<String> LAB_EC2_ILLUSTRATOR_SHARED_SECRET =
+            new StringGuacamoleProperty() {
+                @Override
+                public String getName() {
+                    return "lab-ec2-illustrator-shared-secret";
+                }
+            };
+
+    /**
      * Utility class; do not instantiate.
      */
     private LabEc2Properties() {

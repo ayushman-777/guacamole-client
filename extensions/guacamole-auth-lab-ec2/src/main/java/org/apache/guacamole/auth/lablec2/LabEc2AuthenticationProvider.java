@@ -106,6 +106,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
     private final String illustratorBaseUrl;
     private final String illustratorConnectionPath;
     private final String illustratorPasswordKeyId;
+    private final String illustratorSharedSecret;
     private final PrivateKey illustratorPrivateKey;
 
     private final java.util.concurrent.ConcurrentHashMap<String, DecorationTarget>
@@ -131,6 +132,9 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         );
         illustratorPasswordKeyId = env.getProperty(
                 LabEc2Properties.LAB_EC2_ILLUSTRATOR_PASSWORD_KEY_ID
+        );
+        illustratorSharedSecret = env.getRequiredProperty(
+                LabEc2Properties.LAB_EC2_ILLUSTRATOR_SHARED_SECRET
         );
         String privateKeyPath = env.getRequiredProperty(
                 LabEc2Properties.LAB_EC2_ILLUSTRATOR_PRIVATE_KEY_PATH
@@ -188,8 +192,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         logger.info("Resolving lab connection for user '{}'.",
                 authenticatedUser.getIdentifier());
 
-        String token = extractBearerToken(authenticatedUser, credentials);
-        ConnectionResponse connection = resolveConnection(null, token);
+        ConnectionResponse connection = resolveConnection(authenticatedUser.getIdentifier(), null);
         if (connection == null) {
             logger.info("No active lab mapping found for user '{}'; skipping lab-ec2 decoration.",
                     authenticatedUser.getIdentifier());
@@ -715,7 +718,6 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
                 bearerTokenByUser.remove(userId);
             }
         }
-
         throw new GuacamoleServerException("Missing access token for Illustrator request.");
     }
 
@@ -865,8 +867,8 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         }
     }
 
-    private ConnectionResponse resolveConnection(String purpose, String token) throws GuacamoleException {
-        URI uri = buildConnectionUri(purpose);
+    private ConnectionResponse resolveConnection(String userSub, String purpose) throws GuacamoleException {
+        URI uri = buildConnectionUri(userSub, purpose);
         HttpURLConnection connection = null;
         try {
             URL url = uri.toURL();
@@ -875,7 +877,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(600000);
-            connection.setRequestProperty("Authorization", "Bearer " + token);
+            connection.setRequestProperty("X-Illustrator-Guac-Secret", illustratorSharedSecret);
             connection.setRequestProperty("Accept", "application/json");
             connection.setDoOutput(false);
 
@@ -915,7 +917,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         }
     }
 
-    private URI buildConnectionUri(String purpose) throws GuacamoleException {
+    private URI buildConnectionUri(String userSub, String purpose) throws GuacamoleException {
         String base = illustratorBaseUrl != null ? illustratorBaseUrl.trim() : "";
         if (base.isEmpty()) {
             throw new GuacamoleServerException("Illustrator base URL is not configured.");
@@ -932,9 +934,14 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
             path = "/" + path;
         }
 
-        StringBuilder url = new StringBuilder(base).append(path);
+        if (userSub == null || userSub.trim().isEmpty()) {
+            throw new GuacamoleServerException("Guacamole user subject is required.");
+        }
+
+        StringBuilder url = new StringBuilder(base).append(path)
+                .append("?userSub=").append(urlEncode(userSub.trim()));
         if (purpose != null && !purpose.trim().isEmpty()) {
-            url.append("?purpose=").append(urlEncode(purpose));
+            url.append("&purpose=").append(urlEncode(purpose));
         }
 
         return URI.create(url.toString());
