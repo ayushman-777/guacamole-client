@@ -19,18 +19,29 @@
 
 package org.apache.guacamole.auth.openid;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import javax.ws.rs.core.UriBuilder;
 import org.apache.guacamole.auth.openid.conf.ConfigurationService;
 import org.apache.guacamole.auth.openid.token.TokenValidationService;
 import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.auth.sso.NonceService;
 import org.apache.guacamole.auth.sso.SSOAuthenticationProviderService;
 import org.apache.guacamole.auth.sso.user.SSOAuthenticatedUser;
@@ -53,6 +64,22 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
      * OpenID services upon successful authentication and redirect.
      */
     public static final String TOKEN_PARAMETER_NAME = "id_token";
+
+    /**
+     * The standard HTTP parameter which will be included within the URL by all
+     * OpenID services upon successful authorization code authentication.
+     */
+    public static final String CODE_PARAMETER_NAME = "code";
+
+    /**
+     * OpenID response type for authorization code flow.
+     */
+    private static final String CODE_RESPONSE_TYPE = "code";
+
+    /**
+     * JSON parser for OpenID token endpoint responses.
+     */
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     /**
      * Service for retrieving OpenID configuration information.
@@ -88,6 +115,15 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
 
         // Validate OpenID token in request, if present, and derive username
         String token = credentials.getParameter(TOKEN_PARAMETER_NAME);
+
+        // If authorization code flow is being used, exchange the returned code
+        // for an ID token before continuing with normal validation.
+        if (token == null) {
+            String code = credentials.getParameter(CODE_PARAMETER_NAME);
+            if (code != null)
+                token = exchangeCodeForToken(code);
+        }
+
         if (token != null) {
             JwtClaims claims = tokenService.validateToken(token);
             if (claims != null) {
@@ -112,7 +148,7 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
         // OpenID authorization page via JavaScript)
         throw new GuacamoleInvalidCredentialsException("Invalid login.",
             new CredentialsInfo(Arrays.asList(new Field[] {
-                new RedirectField(TOKEN_PARAMETER_NAME, getLoginURI(),
+                new RedirectField(getResponseParameterName(), getLoginURI(),
                         new TranslatableMessage("LOGIN.INFO_IDP_REDIRECT_PENDING"))
             }))
         );
@@ -123,11 +159,179 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
     public URI getLoginURI() throws GuacamoleException {
         return UriBuilder.fromUri(confService.getAuthorizationEndpoint())
                 .queryParam("scope", confService.getScope())
-                .queryParam("response_type", "token")
+                .queryParam("response_type", confService.getResponseType())
                 .queryParam("client_id", confService.getClientID())
                 .queryParam("redirect_uri", confService.getRedirectURI())
                 .queryParam("nonce", nonceService.generate(confService.getMaxNonceValidity() * 60000L))
                 .build();
+    }
+
+    /**
+     * Returns the credential parameter expected from the OpenID provider for
+     * the configured response type.
+     *
+     * @return
+     *     The credential parameter expected from the OpenID provider.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed.
+     */
+    private String getResponseParameterName() throws GuacamoleException {
+        if (CODE_RESPONSE_TYPE.equals(confService.getResponseType()))
+            return CODE_PARAMETER_NAME;
+
+        return TOKEN_PARAMETER_NAME;
+    }
+
+    /**
+     * Exchanges the given authorization code for an ID token using the OpenID
+     * token endpoint.
+     *
+     * @param code
+     *     The authorization code received from the OpenID provider.
+     *
+     * @return
+     *     The ID token returned by the OpenID provider.
+     *
+     * @throws GuacamoleException
+     *     If the token endpoint cannot be contacted or returns an invalid
+     *     response.
+     */
+    private String exchangeCodeForToken(String code) throws GuacamoleException {
+
+        HttpURLConnection connection = null;
+
+        try {
+            connection = (HttpURLConnection) confService.getTokenEndpoint().toURL().openConnection();
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            String clientID = confService.getClientID();
+            String clientSecret = confService.getClientSecret();
+
+            if (clientSecret != null && !clientSecret.isEmpty()) {
+                String credentials = clientID + ":" + clientSecret;
+                String basicAuth = Base64.getEncoder().encodeToString(
+                        credentials.getBytes(StandardCharsets.UTF_8));
+                connection.setRequestProperty("Authorization", "Basic " + basicAuth);
+            }
+
+            Map<String, String> parameters = new HashMap<>();
+            parameters.put("grant_type", "authorization_code");
+            parameters.put("code", code);
+            parameters.put("redirect_uri", confService.getRedirectURI().toString());
+
+            if (clientSecret == null || clientSecret.isEmpty())
+                parameters.put("client_id", clientID);
+
+            byte[] requestBody = formEncode(parameters).getBytes(StandardCharsets.UTF_8);
+            connection.setRequestProperty("Content-Length", Integer.toString(requestBody.length));
+
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(requestBody);
+            }
+
+            int responseCode = connection.getResponseCode();
+            String responseBody = readResponseBody(connection, responseCode);
+
+            if (responseCode < 200 || responseCode >= 300)
+                throw new GuacamoleServerException("OpenID token endpoint returned HTTP "
+                        + responseCode + ": " + responseBody);
+
+            Map<String, Object> tokenResponse = JSON_MAPPER.readValue(responseBody,
+                    new TypeReference<Map<String, Object>>() {});
+
+            Object idToken = tokenResponse.get(TOKEN_PARAMETER_NAME);
+            if (idToken instanceof String && !((String) idToken).isEmpty())
+                return (String) idToken;
+
+            throw new GuacamoleServerException("OpenID token endpoint response did not contain an ID token.");
+
+        }
+        catch (IOException e) {
+            throw new GuacamoleServerException("Unable to exchange OpenID authorization code.", e);
+        }
+        finally {
+            if (connection != null)
+                connection.disconnect();
+        }
+
+    }
+
+    /**
+     * Encodes the given parameters as an application/x-www-form-urlencoded
+     * request body.
+     *
+     * @param parameters
+     *     The parameters to encode.
+     *
+     * @return
+     *     The encoded form body.
+     */
+    private String formEncode(Map<String, String> parameters) {
+        StringBuilder body = new StringBuilder();
+
+        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+            if (body.length() > 0)
+                body.append('&');
+
+            body.append(urlEncode(entry.getKey()));
+            body.append('=');
+            body.append(urlEncode(entry.getValue()));
+        }
+
+        return body.toString();
+    }
+
+    /**
+     * Encodes the given value for use in an application/x-www-form-urlencoded
+     * request body.
+     *
+     * @param value
+     *     The value to encode.
+     *
+     * @return
+     *     The encoded value.
+     */
+    private String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Reads the response body from the given HTTP connection.
+     *
+     * @param connection
+     *     The HTTP connection to read from.
+     *
+     * @param responseCode
+     *     The HTTP response code returned by the connection.
+     *
+     * @return
+     *     The response body.
+     *
+     * @throws IOException
+     *     If the response body cannot be read.
+     */
+    private String readResponseBody(HttpURLConnection connection, int responseCode)
+            throws IOException {
+
+        InputStream stream = responseCode >= 400
+                ? connection.getErrorStream()
+                : connection.getInputStream();
+
+        if (stream == null)
+            return "";
+
+        byte[] bytes;
+        try (InputStream input = stream) {
+            bytes = input.readAllBytes();
+        }
+
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     @Override
@@ -141,7 +345,16 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
         // Build the logout URI with appropriate parameters
         UriBuilder logoutUriBuilder = UriBuilder.fromUri(logoutEndpoint);
 
-        // Add post_logout_redirect_uri parameter
+        /*
+         * This Cognito Hosted UI rejects browser logout redirects for this
+         * app client despite the redirect URI being registered. Avoid sending
+         * users to Cognito's invalid-request page and return them to the
+         * configured post-logout page instead.
+         */
+        if (isCognitoLogoutEndpoint(logoutEndpoint)) {
+            return confService.getPostLogoutRedirectURI();
+        }
+
         logoutUriBuilder.queryParam("post_logout_redirect_uri",
                 confService.getPostLogoutRedirectURI());
 
@@ -152,6 +365,11 @@ public class AuthenticationProviderService implements SSOAuthenticationProviderS
             logoutUriBuilder.queryParam("client_id", confService.getClientID());
 
         return logoutUriBuilder.build();
+    }
+
+    private boolean isCognitoLogoutEndpoint(URI logoutEndpoint) {
+        String host = logoutEndpoint.getHost();
+        return host != null && host.endsWith(".amazoncognito.com");
     }
 
     @Override

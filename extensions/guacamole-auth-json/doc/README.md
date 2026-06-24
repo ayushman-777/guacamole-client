@@ -1,4 +1,4 @@
-guacamole-auth-json
+﻿guacamole-auth-json
 ===================
 
 guacamole-auth-json is an authentication extension for [Apache

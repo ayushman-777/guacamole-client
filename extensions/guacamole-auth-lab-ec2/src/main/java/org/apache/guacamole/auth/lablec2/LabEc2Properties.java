@@ -27,7 +27,7 @@ import org.apache.guacamole.properties.StringGuacamoleProperty;
 public final class LabEc2Properties {
 
     /**
-     * Base URL for the Illustrator backend (resource server).
+     * Base URL for the Virtual Lab backend (resource server).
      */
     public static final GuacamoleProperty<String> LAB_EC2_ILLUSTRATOR_BASE_URL =
             new StringGuacamoleProperty() {
@@ -50,7 +50,7 @@ public final class LabEc2Properties {
 
     /**
      * Path (file: or classpath:) to PKCS#8 PEM private key used to decrypt
-     * password returned by Illustrator /guac/connection.
+     * password returned by Virtual Lab /guac/connection.
      */
     public static final GuacamoleProperty<String> LAB_EC2_ILLUSTRATOR_PRIVATE_KEY_PATH =
             new StringGuacamoleProperty() {
@@ -61,7 +61,7 @@ public final class LabEc2Properties {
             };
 
     /**
-     * Optional key identifier expected from Illustrator password envelope.
+     * Optional key identifier expected from Virtual Lab password envelope.
      */
     public static final GuacamoleProperty<String> LAB_EC2_ILLUSTRATOR_PASSWORD_KEY_ID =
             new StringGuacamoleProperty() {
@@ -72,7 +72,7 @@ public final class LabEc2Properties {
             };
 
     /**
-     * Shared secret sent to Illustrator's internal Guacamole endpoint.
+     * Shared secret sent to Virtual Lab's internal Guacamole endpoint.
      */
     public static final GuacamoleProperty<String> LAB_EC2_ILLUSTRATOR_SHARED_SECRET =
             new StringGuacamoleProperty() {

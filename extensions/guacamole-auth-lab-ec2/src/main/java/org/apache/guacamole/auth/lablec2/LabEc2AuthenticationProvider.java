@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Authentication provider which decorates existing user contexts with a
- * per-user Illustrator-backed lab connection.
+ * per-user Virtual Lab-backed sandbox connection.
  */
 public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider {
 
@@ -61,9 +61,9 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
             LabEc2AuthenticationProvider.class);
 
     /**
-     * If the user has multiple data sources, this extension can inject the lab
+     * If the user has multiple data sources, this extension can inject the sandbox
      * connection into more than one data source, resulting in duplicate
-     * "My Lab VM" entries. To mitigate this without requiring configuration,
+     * "My Sandbox" entries. To mitigate this without requiring configuration,
      * we temporarily "pin" each user to a single underlying data source.
      */
     private static final long DECORATION_TARGET_TTL_MS = 10L * 60L * 1000L;
@@ -200,31 +200,31 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         }
         String hostname = connection.host;
         if (hostname == null || hostname.isEmpty()) {
-            throw new GuacamoleServerException("Lab VM has no reachable host yet.");
+            throw new GuacamoleServerException("Sandbox VM has no reachable host yet.");
         }
 
         String connectionProtocol = normalizeProtocol(connection.protocol);
         if (connectionProtocol == null) {
-            throw new GuacamoleServerException("Missing protocol from Illustrator response.");
+            throw new GuacamoleServerException("Missing protocol from Virtual Lab response.");
         }
         String connectionPort = connection.port != null ? connection.port.toString() : null;
         if (connectionPort == null || connectionPort.isEmpty()) {
-            throw new GuacamoleServerException("Missing port from Illustrator response.");
+            throw new GuacamoleServerException("Missing port from Virtual Lab response.");
         }
         if (connection.username == null || connection.username.trim().isEmpty()) {
-            throw new GuacamoleServerException("Missing username from Illustrator response.");
+            throw new GuacamoleServerException("Missing username from Virtual Lab response.");
         }
         if (connection.encryptedPassword == null || connection.encryptedPassword.trim().isEmpty()) {
-            throw new GuacamoleServerException("Missing encrypted password from Illustrator response.");
+            throw new GuacamoleServerException("Missing encrypted password from Virtual Lab response.");
         }
         if (connection.passwordEncryptionAlgo == null || connection.passwordEncryptionAlgo.trim().isEmpty()) {
-            throw new GuacamoleServerException("Missing password encryption algorithm from Illustrator response.");
+            throw new GuacamoleServerException("Missing password encryption algorithm from Virtual Lab response.");
         }
 
         if (illustratorPasswordKeyId != null && !illustratorPasswordKeyId.trim().isEmpty()
                 && connection.passwordKeyId != null && !connection.passwordKeyId.trim().isEmpty()
                 && !illustratorPasswordKeyId.trim().equals(connection.passwordKeyId.trim())) {
-            throw new GuacamoleServerException("Unexpected password key identifier from Illustrator response.");
+            throw new GuacamoleServerException("Unexpected password key identifier from Virtual Lab response.");
         }
 
         String decryptedPassword = decryptPassword(connection);
@@ -234,10 +234,10 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
 
         // Determine connection ID
         String connectionId = "lab-" + owner;
-        String connectionName = "My Lab VM";
+        String connectionName = "My Sandbox";
         if ("BUILDER".equalsIgnoreCase(connection.purpose)) {
             connectionId = "lab-build-" + owner;
-            connectionName = "Lab Build VM";
+            connectionName = "Sandbox Build VM";
         }
 
         // Check if connection already exists
@@ -718,7 +718,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
                 bearerTokenByUser.remove(userId);
             }
         }
-        throw new GuacamoleServerException("Missing access token for Illustrator request.");
+        throw new GuacamoleServerException("Missing access token for Virtual Lab request.");
     }
 
     private String tokenFromCredentials(Credentials credentials) {
@@ -800,7 +800,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
             cipher.init(Cipher.DECRYPT_MODE, illustratorPrivateKey);
             return cipher.doFinal(encrypted);
         } catch (GeneralSecurityException e) {
-            throw new GuacamoleServerException("Failed to decrypt Illustrator password payload.", e);
+            throw new GuacamoleServerException("Failed to decrypt Virtual Lab password payload.", e);
         }
     }
 
@@ -872,7 +872,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         HttpURLConnection connection = null;
         try {
             URL url = uri.toURL();
-            logger.debug("Calling Illustrator connection API at '{}'.", uri);
+            logger.debug("Calling Virtual Lab connection API at '{}'.", uri);
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(10000);
@@ -883,33 +883,38 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
 
             int status = connection.getResponseCode();
             String body = readResponseBody(connection, status >= 200 && status < 300);
-            logger.debug("Illustrator /connection responded with HTTP {}.", status);
+            logger.debug("Virtual Lab /connection responded with HTTP {}.", status);
             if (status >= 200 && status < 300) {
                 if (body == null || body.trim().isEmpty()) {
-                    throw new GuacamoleServerException("Illustrator returned an empty connection response.");
+                    throw new GuacamoleServerException("Virtual Lab returned an empty connection response.");
                 }
                 try {
                     ConnectionResponse resolved = objectMapper.readValue(body, ConnectionResponse.class);
                     if (resolved.vmStatus != null && !"RUNNING".equalsIgnoreCase(resolved.vmStatus)) {
-                        throw new GuacamoleServerException("Lab VM is still starting. Please retry shortly.");
+                        logger.info("Sandbox VM for user '{}' is '{}'; skipping lab-ec2 decoration.",
+                                userSub, resolved.vmStatus);
+                        return null;
                     }
                     return resolved;
                 } catch (IOException e) {
-                    throw new GuacamoleServerException("Unable to parse Illustrator response.", e);
+                    throw new GuacamoleServerException("Unable to parse Virtual Lab response.", e);
                 }
             }
 
             if (status == 404) {
-                throw new GuacamoleServerException("No active lab VM mapping found for this user.");
+                logger.info("No active sandbox VM mapping found for user '{}'.", userSub);
+                return null;
             }
 
             if (status == 401 || status == 403) {
-                throw new GuacamoleServerException("Not authorized to access the lab VM.");
+                logger.warn("Virtual Lab denied sandbox connection lookup for user '{}' with HTTP {}.",
+                        userSub, status);
+                return null;
             }
 
-            throw new GuacamoleServerException("Illustrator returned HTTP " + status + ".");
+            throw new GuacamoleServerException("Virtual Lab returned HTTP " + status + ".");
         } catch (IOException e) {
-            throw new GuacamoleServerException("Unable to contact Illustrator API.", e);
+            throw new GuacamoleServerException("Unable to contact Virtual Lab API.", e);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -920,7 +925,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
     private URI buildConnectionUri(String userSub, String purpose) throws GuacamoleException {
         String base = illustratorBaseUrl != null ? illustratorBaseUrl.trim() : "";
         if (base.isEmpty()) {
-            throw new GuacamoleServerException("Illustrator base URL is not configured.");
+            throw new GuacamoleServerException("Virtual Lab base URL is not configured.");
         }
         if (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);

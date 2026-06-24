@@ -108,6 +108,12 @@
             <version>0.9.6</version>
         </dependency>
 
+        <!-- JSON parsing for OpenID token endpoint responses -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
         <!-- Guice -->
         <dependency>
             <groupId>com.google.inject</groupId>

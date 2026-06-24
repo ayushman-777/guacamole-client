@@ -60,6 +60,11 @@ public class ConfigurationService {
     private static final String DEFAULT_SCOPE = "openid email profile";
 
     /**
+     * The default OpenID response type to request.
+     */
+    private static final String DEFAULT_RESPONSE_TYPE = "token";
+
+    /**
      * The default amount of clock skew tolerated for timestamp comparisons
      * between the Guacamole server and OpenID service clocks, in seconds.
      */
@@ -157,6 +162,17 @@ public class ConfigurationService {
     };
 
     /**
+     * The OpenID response type to request from the provider.
+     */
+    private static final StringGuacamoleProperty OPENID_RESPONSE_TYPE =
+            new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "openid-response-type"; }
+
+    };
+
+    /**
      * The amount of clock skew tolerated for timestamp comparisons between the
      * Guacamole server and OpenID service clocks, in seconds.
      */
@@ -205,6 +221,29 @@ public class ConfigurationService {
 
         @Override
         public String getName() { return "openid-client-id"; }
+
+    };
+
+    /**
+     * OpenID client secret which should be submitted to the OpenID service when
+     * exchanging an authorization code for tokens.
+     */
+    private static final StringGuacamoleProperty OPENID_CLIENT_SECRET =
+            new StringGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "openid-client-secret"; }
+
+    };
+
+    /**
+     * The endpoint (URI) of the OpenID token service.
+     */
+    private static final URIGuacamoleProperty OPENID_TOKEN_ENDPOINT =
+            new URIGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "openid-token-endpoint"; }
 
     };
 
@@ -296,6 +335,38 @@ public class ConfigurationService {
      */
     public String getClientID() throws GuacamoleException {
         return environment.getRequiredProperty(OPENID_CLIENT_ID);
+    }
+
+    /**
+     * Returns the OpenID client secret which should be submitted to the OpenID
+     * service when exchanging an authorization code for tokens, as configured
+     * with guacamole.properties.
+     *
+     * @return
+     *     The client secret to use when communicating with the OpenID service,
+     *     or null if no client secret is configured.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed.
+     */
+    public String getClientSecret() throws GuacamoleException {
+        return environment.getProperty(OPENID_CLIENT_SECRET);
+    }
+
+    /**
+     * Returns the endpoint (URI) of the OpenID token service as configured
+     * with guacamole.properties.
+     *
+     * @return
+     *     The token endpoint of the OpenID service, as configured with
+     *     guacamole.properties.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed, or if the token endpoint
+     *     property is missing.
+     */
+    public URI getTokenEndpoint() throws GuacamoleException {
+        return environment.getRequiredProperty(OPENID_TOKEN_ENDPOINT);
     }
 
     /**
@@ -467,6 +538,20 @@ public class ConfigurationService {
      */
     public String getScope() throws GuacamoleException {
         return environment.getProperty(OPENID_SCOPE, DEFAULT_SCOPE);
+    }
+
+    /**
+     * Returns the OpenID response type to request. By default, this will be
+     * "token" for compatibility with the upstream OpenID extension.
+     *
+     * @return
+     *     The OpenID response type to request.
+     *
+     * @throws GuacamoleException
+     *     If guacamole.properties cannot be parsed.
+     */
+    public String getResponseType() throws GuacamoleException {
+        return environment.getProperty(OPENID_RESPONSE_TYPE, DEFAULT_RESPONSE_TYPE);
     }
 
     /**

@@ -20,7 +20,7 @@
 /**
  * UI module that shows a friendly overlay during long-running API requests.
  *
- * This is primarily intended for the lab-ec2 extension, where login can block
+ * This is primarily intended for the virtual-lab extension, where login can block
  * while EC2 instances are started or created.
  */
 (function () {
@@ -62,8 +62,8 @@
             '    <div class="lab-ec2-wait-overlay__steam lab-ec2-wait-overlay__steam--3"></div>' +
             '    <div class="lab-ec2-wait-overlay__cup"></div>' +
             '  </div>' +
-            '  <div class="lab-ec2-wait-overlay__title">Brewing your coffee...</div>' +
-            '  <div class="lab-ec2-wait-overlay__subtitle">Starting your lab VM. This can take a minute.</div>' +
+            '  <div class="lab-ec2-wait-overlay__title">Preparing your sandbox...</div>' +
+            '  <div class="lab-ec2-wait-overlay__subtitle">Starting your sandbox VM. This can take a minute.</div>' +
             '</div>';
 
         overlayElement = overlay;
@@ -160,7 +160,7 @@
                 return false;
 
             // Guacamole uses relative URLs like "api/tokens" and
-            // "api/session/data/...". lab-ec2 can block these while waiting
+            // "api/session/data/...". This extension can block these while waiting
             // for EC2 instances to start.
             return url.indexOf('api/') === 0 || url.indexOf('/api/') !== -1;
         };

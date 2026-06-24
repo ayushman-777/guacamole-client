@@ -19,44 +19,10 @@
 
 package org.apache.guacamole.auth.openid;
 
-import com.google.inject.Inject;
-import java.net.URI;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.UriBuilder;
-import org.apache.guacamole.GuacamoleException;
-import org.apache.guacamole.auth.openid.conf.ConfigurationService;
 import org.apache.guacamole.auth.sso.SSOResource;
 
 /**
- * OpenID resource which exposes both the standard login redirect and a custom
- * logout redirect that terminates the upstream IdP session.
+ * OpenID resource which exposes the standard SSO login/logout redirects.
  */
 public class OpenIDResource extends SSOResource {
-
-    @Inject
-    private ConfigurationService confService;
-
-    /**
-     * Redirects the browser to the OpenID provider logout endpoint. This is
-     * intended for providers like AWS Cognito where logging out of Guacamole
-     * alone does not destroy the provider's SSO session.
-     *
-     * @return
-     *     An HTTP redirect response to the OpenID provider logout endpoint.
-     *
-     * @throws GuacamoleException
-     *     If the logout redirect URI cannot be constructed.
-     */
-    @GET
-    @Path("logout")
-    public Response redirectToIdentityProviderLogout() throws GuacamoleException {
-        URI logoutURI = UriBuilder.fromUri(confService.getProviderLogoutEndpoint())
-                .queryParam("client_id", confService.getClientID())
-                .queryParam("logout_uri", confService.getPostLogoutURI())
-                .build();
-        return Response.seeOther(logoutURI).build();
-    }
-
 }

@@ -2,7 +2,7 @@
 
     "guacamoleVersion" : "1.6.0",
 
-    "name"      : "Lab EC2 Connection Decorator",
+    "name"      : "Virtual Lab Sandbox Connection Decorator",
     "namespace" : "lab-ec2",
 
     "authProviders" : [
