@@ -265,6 +265,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
                 authenticatedUser.getIdentifier(),
                 credentials.getRemoteHostname(),
                 connectionProtocol, connectionPort, connection.username, decryptedPassword,
+                connection.copyPasteAllowed == null || connection.copyPasteAllowed,
                 mergedActiveConnections);
         logger.debug("Prepared lab connection '{}' (name='{}') for user '{}' using protocol='{}' port='{}'.",
                 labConnection.getIdentifier(), labConnection.getName(),
@@ -687,6 +688,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         public String encryptedPassword;
         public String passwordEncryptionAlgo;
         public String passwordKeyId;
+        public Boolean copyPasteAllowed;
         public String vmStatus;
         public String note;
     }
@@ -966,6 +968,7 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
             String hostname, String username,
             String remoteHost, String connectionProtocol, String connectionPort,
             String connectionUsername, String connectionPassword,
+            boolean copyPasteAllowed,
             LabActiveConnectionDirectory activeConnections) {
 
         GuacamoleConfiguration config = new GuacamoleConfiguration();
@@ -975,6 +978,8 @@ public class LabEc2AuthenticationProvider extends AbstractAuthenticationProvider
         String resolvedUsername = connectionUsername != null ? connectionUsername.trim() : "";
         config.setParameter("username", resolvedUsername);
         config.setParameter("ignore-cert", "true");
+        config.setParameter("disable-copy", Boolean.toString(!copyPasteAllowed));
+        config.setParameter("disable-paste", Boolean.toString(!copyPasteAllowed));
 
         String resolvedPassword = connectionPassword != null ? connectionPassword.trim() : "";
         if (!resolvedPassword.isEmpty())
